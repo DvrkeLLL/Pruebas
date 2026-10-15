@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>¿Cuándo pasa mi micro?</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚌</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;600;700&family=DotGothic16&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{
+  --bg:#e6e3dc; --ink:#1d2023; --mut:#686d71; --paper:#f6f4ef; --line:#d3cfc6;
+  --panel:#12151a; --panel-line:#2a2f36; --led:#ffb21a; --led-dim:#8a6420; --go:#62d48f; --bad:#ff7a5c;
+  --font:'Barlow Semi Condensed',system-ui,sans-serif; --dot:'DotGothic16',ui-monospace,monospace;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#1a1d20;--ink:#ecebe6;--mut:#9aa0a5;--paper:#23272b;--line:#33383d;--panel:#0b0d10;--panel-line:#23282e}
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.35;
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--led);outline-offset:2px}
+.wrap{max-width:640px;margin:0 auto;padding:18px 16px 110px}
+
+/* barra superior */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px}
+.top h1{margin:0;font-size:30px;line-height:1;font-weight:700;letter-spacing:-.01em}
+.top .upd{color:var(--mut);font-size:14px;margin-top:6px}
+.icon-btn{border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:9px 13px;font-weight:600}
+.icon-btn:active{transform:translateY(1px)}
+
+/* panel LED */
+.hero{background:var(--panel);border:1px solid var(--panel-line);border-radius:14px;padding:16px 18px;margin-bottom:18px;color:var(--led)}
+.hero .lbl{color:var(--led-dim);font-size:15px}
+.hero .big{font-family:var(--dot);font-size:clamp(34px,9vw,52px);line-height:1.1;margin:6px 0 2px;text-shadow:0 0 12px rgba(255,178,26,.35)}
+.hero .big.go{color:var(--go);text-shadow:0 0 12px rgba(98,212,143,.35)}
+.hero .at{color:var(--led-dim);font-size:15px}
+
+.stop{background:var(--panel);border:1px solid var(--panel-line);border-radius:14px;margin-bottom:16px;overflow:hidden}
+.stop header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:14px 16px 10px;border-bottom:1px dashed var(--panel-line)}
+.stop h2{margin:0;font-size:20px;line-height:1.15;color:#ecebe6;font-weight:600}
+.stop .code{font-family:var(--dot);color:var(--led-dim);font-size:15px}
+.stop .edit{background:none;border:1px solid var(--panel-line);color:#c9c7c0;border-radius:8px;padding:6px 10px;font-size:15px}
+.rows{list-style:none;margin:0;padding:4px 0}
+.row{display:flex;align-items:center;gap:14px;padding:10px 16px}
+.row+.row{border-top:1px solid var(--panel-line)}
+.svc{flex:none;min-width:62px;text-align:center;background:var(--led);color:#1a1200;border-radius:8px;padding:5px 8px;font-weight:700;font-size:21px;letter-spacing:.02em}
+.row.off .svc{background:#3a3f45;color:#9aa0a5}
+.eta{font-family:var(--dot);color:var(--led);font-size:30px;line-height:1.1;text-shadow:0 0 10px rgba(255,178,26,.3)}
+.eta small{font-family:var(--font);font-size:16px;color:var(--led-dim);text-shadow:none;margin-right:4px}
+.eta.go{color:var(--go);text-shadow:0 0 10px rgba(98,212,143,.3)}
+.eta.none{color:#6e747a;font-size:22px;text-shadow:none}
+.sub{color:#8e949a;font-size:14.5px;margin-top:2px}
+.err{color:var(--bad);font-size:14.5px;padding:0 16px 12px}
+.skeleton{color:#6e747a;padding:12px 16px;font-size:15px}
+
+.empty{background:var(--paper);border:1px dashed var(--line);border-radius:14px;padding:28px 20px;text-align:center}
+.empty h2{margin:0 0 6px;font-size:22px}
+.empty p{margin:0 0 16px;color:var(--mut)}
+
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:50;
+  background:var(--led);color:#1a1200;border:0;border-radius:999px;padding:14px 24px;font-weight:700;font-size:18px;box-shadow:0 6px 18px rgba(0,0,0,.28)}
+.btn{background:var(--led);color:#1a1200;border:0;border-radius:10px;padding:12px 18px;font-weight:700;font-size:17px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:600}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad);font-weight:600}
+
+/* selector de paradero */
+#picker{position:fixed;inset:0;z-index:1000;background:var(--bg);display:none;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+#picker.on{display:flex}
+.pbar{display:flex;gap:8px;padding:10px;background:var(--paper);border-bottom:1px solid var(--line)}
+.pbar input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:10px 12px;font:inherit;text-transform:uppercase}
+.mapbox{position:relative;flex:1}
+#map{position:absolute;inset:0}
+#hint{position:absolute;left:10px;right:10px;top:10px;z-index:500;background:var(--panel);color:var(--led);border-radius:10px;padding:9px 12px;font-size:15px;pointer-events:none;text-align:center}
+.locate{position:absolute;right:10px;bottom:16px;z-index:500}
+
+#sheet{position:absolute;left:0;right:0;bottom:0;z-index:1100;background:var(--paper);border-radius:18px 18px 0 0;
+  box-shadow:0 -8px 28px rgba(0,0,0,.25);padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:68%;overflow:auto;
+  transform:translateY(105%);transition:transform .22s ease-out}
+#sheet.open{transform:none}
+#sheet h3{margin:0 0 2px;font-size:21px;line-height:1.15}
+.codeline{display:flex;gap:8px;margin:10px 0}
+.codeline input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:10px 12px;font:inherit;text-transform:uppercase}
+.msg{color:var(--mut);font-size:15px;margin:6px 0}
+.msg.bad{color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 6px}
+.chip{border:2px solid var(--line);background:var(--bg);border-radius:10px;padding:7px 14px;font-weight:700;font-size:19px;min-width:64px}
+.chip[aria-pressed="true"]{background:var(--led);border-color:var(--led);color:#1a1200}
+.chip.dim{opacity:.6}
+.actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.actions .btn{flex:1}
+.manual{display:flex;gap:8px;margin-top:8px}
+.manual input{width:110px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:8px 10px;font:inherit;text-transform:uppercase}
+.leaflet-container{font-family:var(--font)}
+@media (prefers-reduced-motion:reduce){#sheet{transition:none}}
+</style>
+</head>
+<body>
+
+<main class="wrap" id="home">
+  <div class="top">
+    <div>
+      <h1>¿Cuándo pasa mi micro?</h1>
+      <div class="upd" id="upd">Cargando…</div>
+    </div>
+    <button class="icon-btn" id="refresh" aria-label="Actualizar ahora">Actualizar</button>
+  </div>
+  <div id="hero"></div>
+  <div id="stops"></div>
+</main>
+<button class="fab" id="add">+ Agregar paradero</button>
+
+<section id="picker" aria-label="Elegir paradero">
+  <div class="pbar">
+    <button class="icon-btn" id="back">Volver</button>
+    <input id="qcode" placeholder="Código (ej. PA433)" autocomplete="off" aria-label="Código de paradero">
+    <button class="icon-btn" id="qgo">Buscar</button>
+  </div>
+  <div class="mapbox">
+    <div id="map"></div>
+    <div id="hint">Acerca el mapa para ver los paraderos</div>
+    <button class="icon-btn locate" id="locate">Mi ubicación</button>
+    <div id="sheet" role="dialog" aria-live="polite"></div>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function(){
+'use strict';
+const KEY='paradero-home-v1';
+const API='https://api.xor.cl/red/bus-stop/';
+const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- almacenamiento local ---------- */
+let state=load();
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&Array.isArray(s.stops))return s}catch(e){}return{stops:[]}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+
+/* ---------- API ---------- */
+async function fetchStop(code){
+  const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),12000);
+  try{
+    const r=await fetch(API+encodeURIComponent(code),{signal:ctl.signal});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  } finally{clearTimeout(t)}
+}
+
+/* ---------- inicio ---------- */
+const arrivals={}; // code -> {data,error,loading}
+let lastUpdate=null;
+
+function fmtDist(m){if(m==null)return'';return m<1000?`${Math.round(m)} m`:`${(m/1000).toFixed(1).replace('.',',')} km`}
+function eta(b){
+  if(!b) return null;
+  const mn=b.min_arrival_time, mx=b.max_arrival_time;
+  if(mn==null&&mx==null) return null;
+  const lo=mn??mx, hi=mx??mn;
+  if(hi<=1&&lo<=1) return {sort:0,go:true,txt:'Llegando'};
+  return {sort:lo,go:false,txt:(lo===hi?`${lo}`:`${lo}–${hi}`)+' min'};
+}
+function serviceInfo(code,id){
+  const d=arrivals[code]?.data; if(!d||!Array.isArray(d.services)) return null;
+  return d.services.find(s=>String(s.id).toUpperCase()===id)||null;
+}
+
+function renderHome(){
+  const box=$('#stops');
+  if(!state.stops.length){
+    $('#hero').innerHTML='';
+    box.innerHTML=`<div class="empty"><h2>Aún no tienes paraderos</h2><p>Elige uno en el mapa y marca las micros que te sirven. Esta página te dirá en cuántos minutos viene cada una.</p><button class="btn" id="add2">Elegir paradero</button></div>`;
+    $('#add2').onclick=()=>openPicker();
+    $('#upd').textContent='Sin paraderos guardados';
+    return;
+  }
+  let best=null;
+  box.innerHTML=state.stops.map((st,i)=>{
+    const a=arrivals[st.code]||{};
+    const name=a.data?.name||st.name||'Paradero';
+    const rows=st.services.map(id=>{
+      const s=serviceInfo(st.code,id);
+      const first=s?.buses?.[0], second=s?.buses?.[1];
+      const e=eta(first), e2=eta(second);
+      if(e && (!best||e.sort<best.e.sort)) best={e,id,name,code:st.code};
+      let main,sub,cls='';
+      if(e){
+        main=`<div class="eta ${e.go?'go':''}">${e.go?'':'<small>en</small>'}${esc(e.txt)}</div>`;
+        sub=[fmtDist(first.meters_distance),first.id,e2?`siguiente: ${e2.txt==='Llegando'?'llegando':'en '+e2.txt}`:''].filter(Boolean).join(' · ');
+      }else if(!arrivals[st.code]?.data){
+        main=`<div class="eta none">${a.loading?'Consultando…':'—'}</div>`;sub='';
+      }else{
+        main=`<div class="eta none">Sin micros próximas</div>`;
+        sub=s?.status_description&&!/ok|horario/i.test(s.status_description)?s.status_description:(s?'':'Esta micro no aparece hoy en este paradero');
+        if(s&&s.valid===false) cls='off';
+      }
+      return `<li class="row ${cls}"><span class="svc">${esc(id)}</span><div>${main}<div class="sub">${esc(sub)}</div></div></li>`;
+    }).join('');
+    return `<article class="stop">
+      <header><div><h2>${esc(name)}</h2><span class="code">${esc(st.code)}</span></div><button class="edit" data-i="${i}">Editar</button></header>
+      <ul class="rows">${rows||'<li class="skeleton">Sin micros elegidas</li>'}</ul>
+      ${a.error?`<div class="err">${esc(a.error)}</div>`:''}
+    </article>`;
+  }).join('');
+  box.querySelectorAll('.edit').forEach(b=>b.onclick=()=>openPicker(state.stops[+b.dataset.i]));
+  $('#hero').innerHTML=best?`<div class="hero"><div class="lbl">La próxima micro</div>
+    <div class="big ${best.e.go?'go':''}">${esc(best.id)} ${best.e.go?'llegando':'en '+esc(best.e.txt)}</div>
+    <div class="at">${esc(best.name)} · ${esc(best.code)}</div></div>`:'';
+  $('#upd').textContent=lastUpdate?`Actualizado ${lastUpdate.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:'Consultando…';
+}
+
+async function refreshAll(){
+  if(!state.stops.length){renderHome();return}
+  state.stops.forEach(s=>{arrivals[s.code]={...(arrivals[s.code]||{}),loading:true}});
+  renderHome();
+  await Promise.all(state.stops.map(async s=>{
+    try{
+      const data=await fetchStop(s.code);
+      arrivals[s.code]={data,loading:false};
+      if(data.name&&data.name!==s.name){s.name=data.name;save()}
+    }catch(e){
+      arrivals[s.code]={...arrivals[s.code],loading:false,error:'No se pudo actualizar. Se reintenta solo cada 30 segundos.'};
+    }
+  }));
+  lastUpdate=new Date(); renderHome();
+}
+
+$('#refresh').onclick=refreshAll;
+$('#add').onclick=()=>openPicker();
+setInterval(()=>{if(!document.hidden&&!$('#picker').classList.contains('on'))refreshAll()},30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('#picker').classList.contains('on'))refreshAll()});
+
+/* ---------- selector con mapa ---------- */
+let map=null, layer=null, markers=new Map(), selMarker=null, loadTimer=null, sel=null;
+const STYLE={fillColor:'#ffb21a',color:'#12151a',weight:2,fillOpacity:.95,radius:9};
+const STYLE_NOCODE={fillColor:'#9aa0a5',color:'#12151a',weight:2,fillOpacity:.8,radius:7};
+const STYLE_SEL={fillColor:'#62d48f',color:'#ffffff',weight:3,fillOpacity:1,radius:12};
+
+function initMap(){
+  if(map) return;
+  map=L.map('map',{zoomControl:true}).setView([-33.4489,-70.6693],15);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+  map.on('moveend',()=>{clearTimeout(loadTimer);loadTimer=setTimeout(loadStops,350)});
+}
+function openPicker(stop){
+  $('#picker').classList.add('on');
+  initMap();
+  setTimeout(()=>{
+    map.invalidateSize();
+    if(stop&&stop.lat!=null) map.setView([stop.lat,stop.lng],17);
+    else if(!stop&&!openPicker.did){openPicker.did=true;locate(true)}
+    loadStops();
+  },60);
+  if(stop) openSheet(stop); else closeSheet();
+}
+function closePicker(){$('#picker').classList.remove('on');closeSheet();refreshAll()}
+$('#back').onclick=closePicker;
+
+function locate(silent){
+  if(!navigator.geolocation){ if(!silent)alert('Tu navegador no permite obtener la ubicación.');return}
+  navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],17),()=>{},{timeout:8000});
+}
+$('#locate').onclick=()=>locate(false);
+
+function extractCode(tags){
+  const re=/\bP[A-Z]\d{1,5}\b/i;
+  for(const k of ['ref','ref:red','ref:transantiago','ref:cl','official_ref','local_ref','name']){
+    const m=tags[k]&&String(tags[k]).match(re); if(m) return m[0].toUpperCase();
+  }
+  for(const v of Object.values(tags)){const m=String(v).match(re);if(m)return m[0].toUpperCase()}
+  return null;
+}
+
+async function loadStops(){
+  const hint=$('#hint');
+  if(map.getZoom()<16){hint.style.display='block';hint.textContent='Acerca el mapa para ver los paraderos';return}
+  const b=map.getBounds();
+  const q=`[out:json][timeout:25];node["highway"="bus_stop"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});out body 500;`;
+  hint.style.display='block';hint.textContent='Buscando paraderos…';
+  let json=null;
+  for(const url of OVERPASS){
+    try{
+      const r=await fetch(url,{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+      if(r.ok){json=await r.json();break}
+    }catch(e){}
+  }
+  if(!json){hint.textContent='No se pudieron cargar los paraderos. Usa el buscador por código.';return}
+  json.elements.forEach(el=>{
+    if(markers.has(el.id)) return;
+    const code=extractCode(el.tags||{});
+    const m=L.circleMarker([el.lat,el.lon],code?STYLE:STYLE_NOCODE).addTo(layer);
+    m.meta={code,name:el.tags?.name||'',lat:el.lat,lng:el.lon,base:code?STYLE:STYLE_NOCODE};
+    m.on('click',()=>{
+      if(selMarker) selMarker.setStyle(selMarker.meta.base);
+      selMarker=m; m.setStyle(STYLE_SEL); m.bringToFront();
+      const saved=state.stops.find(s=>s.code===m.meta.code);
+      openSheet(saved||{code:m.meta.code||'',name:m.meta.name,lat:m.meta.lat,lng:m.meta.lng,services:[]});
+    });
+    markers.set(el.id,m);
+  });
+  hint.style.display='none';
+}
+
+/* ---------- hoja inferior ---------- */
+function closeSheet(){$('#sheet').classList.remove('open');sel=null;if(selMarker){selMarker.setStyle(selMarker.meta.base);selMarker=null}}
+
+function openSheet(stop){
+  const saved=state.stops.find(s=>s.code===stop.code);
+  sel={code:stop.code||'',name:stop.name||'',lat:stop.lat??null,lng:stop.lng??null,
+       chosen:new Set((saved?saved.services:stop.services||[]).map(String)),
+       available:[],status:'idle',saved:!!saved};
+  renderSheet();
+  $('#sheet').classList.add('open');
+  if(sel.code) lookup();
+}
+
+async function lookup(){
+  const code=sel.code.trim().toUpperCase(); if(!code) return;
+  sel.code=code; sel.status='loading'; renderSheet();
+  try{
+    const d=await fetchStop(code);
+    if(sel.code!==code) return;
+    if(d.name) sel.name=d.name;
+    sel.available=(d.services||[]).map(s=>({id:String(s.id).toUpperCase(),valid:s.valid!==false}));
+    sel.status=sel.available.length?'ok':'empty';
+  }catch(e){ if(sel.code===code) sel.status='error' }
+  renderSheet();
+}
+
+function renderSheet(){
+  if(!sel) return;
+  const ids=[...new Set([...sel.available.map(s=>s.id),...sel.chosen])].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+  const dim=id=>{const s=sel.available.find(x=>x.id===id);return s&&!s.valid};
+  let msg='';
+  if(!sel.code) msg='<p class="msg">Este paradero no tiene código en el mapa. Escríbelo abajo: está en el letrero del paradero.</p>';
+  else if(sel.status==='loading') msg='<p class="msg">Buscando micros…</p>';
+  else if(sel.status==='error') msg='<p class="msg bad">No pude consultar ese código. Revisa que esté bien escrito y tu conexión.</p>';
+  else if(sel.status==='empty') msg='<p class="msg">No hay micros informadas ahora (puede ser de noche). Puedes agregarlas a mano.</p>';
+  else if(sel.status==='ok') msg='<p class="msg">Toca las micros que quieres ver en tu inicio.</p>';
+  $('#sheet').innerHTML=`
+    <h3>${esc(sel.name||'Paradero')}</h3>
+    <div class="codeline"><input id="scode" value="${esc(sel.code)}" placeholder="Código (ej. PA433)" autocomplete="off" aria-label="Código del paradero"><button class="icon-btn" id="sgo">Buscar micros</button></div>
+    ${msg}
+    <div class="chips">${ids.map(id=>`<button class="chip ${dim(id)?'dim':''}" data-id="${esc(id)}" aria-pressed="${sel.chosen.has(id)}">${esc(id)}</button>`).join('')}</div>
+    ${sel.code?`<div class="manual"><input id="sman" placeholder="Otra micro" aria-label="Agregar micro a mano"><button class="icon-btn" id="sadd">Agregar</button></div>`:''}
+    <div class="actions">
+      <button class="btn" id="ssave" ${sel.chosen.size&&sel.code?'':'disabled'}>Guardar en mi inicio</button>
+      ${sel.saved?'<button class="btn danger" id="sdel">Quitar paradero</button>':'<button class="btn ghost" id="scancel">Cancelar</button>'}
+    </div>`;
+  const $s=s=>$('#sheet').querySelector(s);
+  $s('#scode').addEventListener('input',e=>{sel.code=e.target.value.toUpperCase()});
+  $s('#scode').addEventListener('keydown',e=>{if(e.key==='Enter')lookup()});
+  $s('#sgo').onclick=()=>{sel.code=$s('#scode').value;lookup()};
+  $('#sheet').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    const id=c.dataset.id; sel.chosen.has(id)?sel.chosen.delete(id):sel.chosen.add(id); renderSheet();
+  });
+  const add=()=>{const v=($s('#sman').value||'').trim().toUpperCase();if(v){sel.chosen.add(v);renderSheet()}};
+  if($s('#sadd')){$s('#sadd').onclick=add;$s('#sman').addEventListener('keydown',e=>{if(e.key==='Enter')add()})}
+  $s('#ssave').onclick=()=>{
+    const code=$s('#scode').value.trim().toUpperCase(); if(!code||!sel.chosen.size) return;
+    const rec={code,name:sel.name,lat:sel.lat,lng:sel.lng,services:[...sel.chosen]};
+    const i=state.stops.findIndex(s=>s.code===code);
+    i>=0?state.stops[i]=rec:state.stops.push(rec);
+    save(); closePicker();
+  };
+  if($s('#sdel')) $s('#sdel').onclick=()=>{
+    state.stops=state.stops.filter(s=>s.code!==sel.code); delete arrivals[sel.code]; save(); closePicker();
+  };
+  if($s('#scancel')) $s('#scancel').onclick=closeSheet;
+}
+
+$('#qgo').onclick=()=>{const v=$('#qcode').value.trim().toUpperCase();if(v)openSheet({code:v})};
+$('#qcode').addEventListener('keydown',e=>{if(e.key==='Enter')$('#qgo').click()});
+
+/* ---------- arranque ---------- */
+renderHome();
+refreshAll();
+})();
+</script>
+</body>
+</html>
